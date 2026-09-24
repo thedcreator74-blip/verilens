@@ -1,0 +1,6 @@
+{
+  "name": "VeriLens AI",
+  "description": "VeriLens AI helps users quickly verify information from screenshots, text, and web links. Think Before You Share.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

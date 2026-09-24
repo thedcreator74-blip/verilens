@@ -1,0 +1,253 @@
+{
+  "domains": {
+    "pib.gov.in": {
+      "name": "Press Information Bureau (PIB)",
+      "reputation": "official",
+      "trust_score": 98.0,
+      "categories": ["Government", "Politics", "General"],
+      "is_official": true
+    },
+    "india.gov.in": {
+      "name": "National Portal of India",
+      "reputation": "official",
+      "trust_score": 99.0,
+      "categories": ["Government", "General"],
+      "is_official": true
+    },
+    "mygov.in": {
+      "name": "MyGov India",
+      "reputation": "official",
+      "trust_score": 96.0,
+      "categories": ["Government"],
+      "is_official": true
+    },
+    "who.int": {
+      "name": "World Health Organization",
+      "reputation": "official",
+      "trust_score": 99.0,
+      "categories": ["Health", "Science"],
+      "is_official": true
+    },
+    "cdc.gov": {
+      "name": "Centers for Disease Control and Prevention",
+      "reputation": "official",
+      "trust_score": 98.0,
+      "categories": ["Health"],
+      "is_official": true
+    },
+    "nih.gov": {
+      "name": "National Institutes of Health",
+      "reputation": "official",
+      "trust_score": 98.0,
+      "categories": ["Health", "Science"],
+      "is_official": true
+    },
+    "icmr.gov.in": {
+      "name": "Indian Council of Medical Research",
+      "reputation": "official",
+      "trust_score": 97.0,
+      "categories": ["Health"],
+      "is_official": true
+    },
+    "rbi.org.in": {
+      "name": "Reserve Bank of India",
+      "reputation": "official",
+      "trust_score": 99.0,
+      "categories": ["Finance", "Business"],
+      "is_official": true
+    },
+    "sebi.gov.in": {
+      "name": "Securities and Exchange Board of India",
+      "reputation": "official",
+      "trust_score": 98.0,
+      "categories": ["Finance"],
+      "is_official": true
+    },
+    "nseindia.com": {
+      "name": "National Stock Exchange of India",
+      "reputation": "official",
+      "trust_score": 96.0,
+      "categories": ["Finance", "Business"],
+      "is_official": true
+    },
+    "ugc.gov.in": {
+      "name": "University Grants Commission",
+      "reputation": "official",
+      "trust_score": 97.0,
+      "categories": ["Education"],
+      "is_official": true
+    },
+    "aicte-india.org": {
+      "name": "All India Council for Technical Education",
+      "reputation": "official",
+      "trust_score": 96.0,
+      "categories": ["Education"],
+      "is_official": true
+    },
+    "isro.gov.in": {
+      "name": "Indian Space Research Organisation",
+      "reputation": "official",
+      "trust_score": 99.0,
+      "categories": ["Science", "Technology"],
+      "is_official": true
+    },
+    "nasa.gov": {
+      "name": "NASA",
+      "reputation": "official",
+      "trust_score": 99.0,
+      "categories": ["Science", "Technology"],
+      "is_official": true
+    },
+    "mausam.imd.gov.in": {
+      "name": "India Meteorological Department",
+      "reputation": "official",
+      "trust_score": 98.0,
+      "categories": ["Weather", "Science"],
+      "is_official": true
+    },
+    "reuters.com": {
+      "name": "Reuters News Agency",
+      "reputation": "high",
+      "trust_score": 94.0,
+      "categories": ["General", "Politics", "Business", "Technology", "Science"],
+      "is_official": false
+    },
+    "apnews.com": {
+      "name": "Associated Press",
+      "reputation": "high",
+      "trust_score": 94.0,
+      "categories": ["General", "Politics", "Business", "Sports"],
+      "is_official": false
+    },
+    "bbc.com": {
+      "name": "BBC News",
+      "reputation": "high",
+      "trust_score": 92.0,
+      "categories": ["General", "Politics", "Science", "Entertainment"],
+      "is_official": false
+    },
+    "thehindu.com": {
+      "name": "The Hindu",
+      "reputation": "high",
+      "trust_score": 90.0,
+      "categories": ["General", "Government", "Politics", "Education"],
+      "is_official": false
+    },
+    "indianexpress.com": {
+      "name": "The Indian Express",
+      "reputation": "high",
+      "trust_score": 89.0,
+      "categories": ["General", "Government", "Politics", "Education"],
+      "is_official": false
+    },
+    "livemint.com": {
+      "name": "Mint",
+      "reputation": "high",
+      "trust_score": 88.0,
+      "categories": ["Finance", "Business"],
+      "is_official": false
+    },
+    "techcrunch.com": {
+      "name": "TechCrunch",
+      "reputation": "high",
+      "trust_score": 88.0,
+      "categories": ["Technology", "Business"],
+      "is_official": false
+    },
+    "theverge.com": {
+      "name": "The Verge",
+      "reputation": "high",
+      "trust_score": 87.0,
+      "categories": ["Technology", "Entertainment"],
+      "is_official": false
+    },
+    "nature.com": {
+      "name": "Nature Publishing Group",
+      "reputation": "official",
+      "trust_score": 98.0,
+      "categories": ["Science", "Health"],
+      "is_official": true
+    },
+    "altnews.in": {
+      "name": "Alt News Fact Check",
+      "reputation": "high",
+      "trust_score": 92.0,
+      "categories": ["General", "Politics", "Government"],
+      "is_official": false
+    },
+    "boomlive.in": {
+      "name": "BOOM FactCheck",
+      "reputation": "high",
+      "trust_score": 91.0,
+      "categories": ["General", "Politics", "Health"],
+      "is_official": false
+    }
+  },
+  "category_mappings": {
+    "Government": {
+      "priority_domains": ["pib.gov.in", "india.gov.in", "mygov.in"],
+      "trusted_domains": ["thehindu.com", "indianexpress.com", "reuters.com", "altnews.in"],
+      "fallback_domains": ["bbc.com", "apnews.com"]
+    },
+    "Politics": {
+      "priority_domains": ["pib.gov.in", "reuters.com", "apnews.com"],
+      "trusted_domains": ["thehindu.com", "indianexpress.com", "bbc.com", "altnews.in"],
+      "fallback_domains": ["boomlive.in"]
+    },
+    "Health": {
+      "priority_domains": ["who.int", "cdc.gov", "nih.gov", "icmr.gov.in"],
+      "trusted_domains": ["nature.com", "reuters.com", "bbc.com"],
+      "fallback_domains": ["thehindu.com", "boomlive.in"]
+    },
+    "Technology": {
+      "priority_domains": ["techcrunch.com", "theverge.com", "reuters.com"],
+      "trusted_domains": ["arstechnica.com", "wired.com", "bbc.com"],
+      "fallback_domains": ["indianexpress.com"]
+    },
+    "Finance": {
+      "priority_domains": ["rbi.org.in", "sebi.gov.in", "nseindia.com"],
+      "trusted_domains": ["livemint.com", "reuters.com", "bloomberg.com"],
+      "fallback_domains": ["thehindu.com", "indianexpress.com"]
+    },
+    "Education": {
+      "priority_domains": ["ugc.gov.in", "aicte-india.org"],
+      "trusted_domains": ["indianexpress.com", "thehindu.com"],
+      "fallback_domains": ["timesofindia.indiatimes.com"]
+    },
+    "Business": {
+      "priority_domains": ["reuters.com", "livemint.com", "rbi.org.in"],
+      "trusted_domains": ["bloomberg.com", "indianexpress.com"],
+      "fallback_domains": ["thehindu.com"]
+    },
+    "Science": {
+      "priority_domains": ["isro.gov.in", "nasa.gov", "nature.com"],
+      "trusted_domains": ["reuters.com", "bbc.com"],
+      "fallback_domains": ["thehindu.com"]
+    },
+    "Sports": {
+      "priority_domains": ["reuters.com", "apnews.com", "bbc.com"],
+      "trusted_domains": ["espncricinfo.com", "thehindu.com"],
+      "fallback_domains": ["indianexpress.com"]
+    },
+    "Weather": {
+      "priority_domains": ["mausam.imd.gov.in"],
+      "trusted_domains": ["reuters.com", "thehindu.com", "indianexpress.com"],
+      "fallback_domains": ["bbc.com"]
+    },
+    "Crime": {
+      "priority_domains": ["pib.gov.in", "thehindu.com"],
+      "trusted_domains": ["indianexpress.com", "reuters.com"],
+      "fallback_domains": ["bbc.com"]
+    },
+    "Entertainment": {
+      "priority_domains": ["reuters.com", "bbc.com", "theverge.com"],
+      "trusted_domains": ["thehindu.com", "indianexpress.com"],
+      "fallback_domains": ["apnews.com"]
+    },
+    "General": {
+      "priority_domains": ["pib.gov.in", "reuters.com", "apnews.com"],
+      "trusted_domains": ["bbc.com", "thehindu.com", "indianexpress.com", "altnews.in"],
+      "fallback_domains": ["boomlive.in"]
+    }
+  }
+}
