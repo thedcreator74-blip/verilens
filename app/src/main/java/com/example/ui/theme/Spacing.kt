@@ -14,7 +14,7 @@ data class Spacing(
     val large: Dp = 24.dp,
     val extraLarge: Dp = 32.dp,
     val massive: Dp = 48.dp,
-    val screenPadding: Dp = 20.dp,
+    val screenPadding: Dp = 16.dp,
     val cardPadding: Dp = 16.dp,
     val touchTarget: Dp = 48.dp
 )

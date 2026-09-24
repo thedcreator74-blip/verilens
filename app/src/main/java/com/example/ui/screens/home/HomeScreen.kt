@@ -1,15 +1,15 @@
 package com.example.ui.screens.home
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,30 +23,25 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.PhotoCamera
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,358 +49,336 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.ui.components.HistoryItemCard
-import com.example.ui.theme.LocalExtendedColors
-import com.example.ui.theme.LocalSpacing
+import androidx.compose.ui.unit.sp
+import com.example.data.local.database.entities.HistoryEntity
+import com.example.feature.verification.model.Verdict
+import com.example.ui.components.VerdictBadge
+import com.example.ui.theme.CyanLight
+import com.example.ui.theme.CyanPrimary
+import com.example.ui.theme.Navy700
+import com.example.ui.theme.Navy800
+import com.example.ui.theme.Navy900
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel,
+    onNavigateToCamera: () -> Unit,
     onNavigateToReport: (Long) -> Unit,
-    onNavigateToHistory: () -> Unit,
-    onOpenOverlaySheet: () -> Unit,
-    onNavigateToAskVeriLens: () -> Unit = {},
+    onNavigateToAskAi: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val stats by viewModel.stats.collectAsStateWithLifecycle()
-    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
-    val recentHistory by viewModel.filteredRecentHistory.collectAsStateWithLifecycle()
-    val extendedColors = LocalExtendedColors.current
-    val spacing = LocalSpacing.current
+    val recentHistory by viewModel.recentHistory.collectAsState()
+    val stats by viewModel.stats.collectAsState()
 
     var showTextDialog by remember { mutableStateOf(false) }
     var showLinkDialog by remember { mutableStateOf(false) }
 
-    if (showTextDialog) {
-        PasteTextVerifyDialog(
-            onDismiss = { showTextDialog = false },
-            onVerify = { text ->
-                showTextDialog = false
-                viewModel.verifyText(text) { id ->
-                    onNavigateToReport(id)
+    // Photo picker launcher
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            viewModel.verifyScreenshotUri(uri)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.navigateToReport.collect { historyId ->
+            onNavigateToReport(historyId)
+        }
+    }
+
+    Scaffold(
+        modifier = modifier,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Security,
+                            contentDescription = "VeriLens AI",
+                            tint = CyanPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "VeriLens AI",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(MaterialTheme.colorScheme.background)
+                .padding(horizontal = 16.dp)
+        ) {
+            item {
+                Spacer(modifier = Modifier.height(12.dp))
+                // Hero banner
+                HeroVerificationHeader()
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Primary Input Options Grid
+                Text(
+                    text = "Verify Anything Before Sharing",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                VerificationMethodsGrid(
+                    onCameraClick = onNavigateToCamera,
+                    onScreenshotClick = {
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                    onTextClick = { showTextDialog = true },
+                    onLinkClick = { showLinkDialog = true }
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // Stats Banner
+                StatsSummaryRow(stats = stats)
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "Recent Verifications",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+
+            if (recentHistory.isEmpty()) {
+                item {
+                    EmptyHistoryBanner()
                 }
+            } else {
+                items(recentHistory.take(10), key = { it.id }) { item ->
+                    RecentHistoryItem(
+                        history = item,
+                        onClick = { onNavigateToReport(item.id) }
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(80.dp))
+            }
+        }
+    }
+
+    if (showTextDialog) {
+        VerifyTextDialog(
+            onDismiss = { showTextDialog = false },
+            onConfirm = { text ->
+                showTextDialog = false
+                viewModel.verifyText(text)
             }
         )
     }
 
     if (showLinkDialog) {
-        PasteLinkVerifyDialog(
+        VerifyLinkDialog(
             onDismiss = { showLinkDialog = false },
-            onVerify = { url ->
+            onConfirm = { url ->
                 showLinkDialog = false
-                viewModel.verifyLink(url) { id ->
-                    onNavigateToReport(id)
-                }
+                viewModel.verifyLink(url)
             }
         )
     }
+}
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        modifier = modifier.fillMaxSize().testTag("home_screen_root")
-    ) { innerPadding ->
-        LazyColumn(
-            contentPadding = PaddingValues(
-                start = 20.dp,
-                end = 20.dp,
-                top = innerPadding.calculateTopPadding() + 16.dp,
-                bottom = innerPadding.calculateBottomPadding() + 84.dp
-            ),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
-            modifier = Modifier.fillMaxSize()
+@Composable
+fun HeroVerificationHeader() {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = Navy800,
+        border = androidx.compose.foundation.BorderStroke(1.dp, CyanPrimary.copy(alpha = 0.3f)),
+        modifier = Modifier.fillMaxWidth().testTag("hero_verification_banner")
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "“Think Before You Share”",
+                color = CyanLight,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Instant Cross-Source Fact Verification",
+                color = Color.White,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Analyze WhatsApp rumors, printed posters, news articles, and viral screenshots against authoritative fact-checking networks.",
+                color = Color.White.copy(alpha = 0.75f),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+fun VerificationMethodsGrid(
+    onCameraClick: () -> Unit,
+    onScreenshotClick: () -> Unit,
+    onTextClick: () -> Unit,
+    onLinkClick: () -> Unit
+) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header & Tagline Greeting
-            item {
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primary),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Shield,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "VeriLens AI",
-                                    style = MaterialTheme.typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Think Before You Share",
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "Verify claims, screenshots, and links before passing them along to friends or followers.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+            // Camera Card (Prominent primary action)
+            VerificationMethodCard(
+                title = "Camera Scan",
+                subtitle = "Newspapers, posters & screens",
+                icon = Icons.Default.CameraAlt,
+                badgeText = "New",
+                accentColor = CyanPrimary,
+                onClick = onCameraClick,
+                modifier = Modifier.weight(1f).testTag("action_verify_camera")
+            )
+
+            // Screenshot Card
+            VerificationMethodCard(
+                title = "Screenshot",
+                subtitle = "Social chats & images",
+                icon = Icons.Default.Image,
+                badgeText = null,
+                accentColor = Color(0xFF6366F1),
+                onClick = onScreenshotClick,
+                modifier = Modifier.weight(1f).testTag("action_verify_screenshot")
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Text Message Card
+            VerificationMethodCard(
+                title = "Paste Message",
+                subtitle = "Viral forwards & text",
+                icon = Icons.Default.TextFields,
+                badgeText = null,
+                accentColor = Color(0xFF10B981),
+                onClick = onTextClick,
+                modifier = Modifier.weight(1f).testTag("action_verify_text")
+            )
+
+            // Link Card
+            VerificationMethodCard(
+                title = "Verify Link",
+                subtitle = "Articles & domain trust",
+                icon = Icons.Default.Link,
+                badgeText = null,
+                accentColor = Color(0xFFF59E0B),
+                onClick = onLinkClick,
+                modifier = Modifier.weight(1f).testTag("action_verify_link")
+            )
+        }
+    }
+}
+
+@Composable
+fun VerificationMethodCard(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    badgeText: String?,
+    accentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.height(115.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(accentColor.copy(alpha = 0.15f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = title,
+                        tint = accentColor,
+                        modifier = Modifier.size(20.dp)
                     )
+                }
+
+                if (badgeText != null) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = accentColor.copy(alpha = 0.2f)
+                    ) {
+                        Text(
+                            text = badgeText,
+                            color = accentColor,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
             }
 
-            // Search Bar
-            item {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.onSearchQueryChanged(it) },
-                    placeholder = {
-                        Text(
-                            text = "Search claims, topics, or sources...",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = "Search",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.onSearchQueryChanged("") }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Clear,
-                                    contentDescription = "Clear",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surface,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = extendedColors.cardBorder
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("home_search_bar")
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
                 )
-            }
-
-            // Verification Statistics Card
-            item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, extendedColors.cardBorder, RoundedCornerShape(20.dp))
-                        .testTag("statistics_card")
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "Verification Insights",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.TrendingUp,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Active Protection",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Row(
-                            horizontalArrangement = Arrangement.SpaceAround,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            StatColumnItem(
-                                value = "${stats.totalVerified}",
-                                label = "Total Checked",
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            StatColumnItem(
-                                value = "${stats.averageScore}%",
-                                label = "Avg Credibility",
-                                color = extendedColors.success
-                            )
-                            StatColumnItem(
-                                value = "${stats.misleadingBlocked}",
-                                label = "Flags Blocked",
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Quick Actions Header & Row
-            item {
-                Column {
-                    Text(
-                        text = "Quick Verification",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        QuickActionCard(
-                            icon = Icons.Filled.PhotoCamera,
-                            label = "Screenshot",
-                            modifier = Modifier.weight(1f),
-                            onClick = onOpenOverlaySheet
-                        )
-                        QuickActionCard(
-                            icon = Icons.Filled.ContentPaste,
-                            label = "Paste Text",
-                            modifier = Modifier.weight(1f),
-                            onClick = { showTextDialog = true }
-                        )
-                        QuickActionCard(
-                            icon = Icons.Filled.Link,
-                            label = "Verify Link",
-                            modifier = Modifier.weight(1f),
-                            onClick = { showLinkDialog = true }
-                        )
-                    }
-                }
-            }
-
-            // Ask VeriLens Evidence Assistant Spotlight Card
-            item {
-                Card(
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
-                        .testTag("ask_verilens_spotlight_card")
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Chat,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Ask VeriLens Assistant",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "Have questions about evidence, sources, or confidence scores? Chat with your verification assistant.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        TextButton(onClick = onNavigateToAskVeriLens) {
-                            Text("Open", fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-
-            // Recent Reports Section
-            item {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = "Recent Reports",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    TextButton(onClick = onNavigateToHistory) {
-                        Text(
-                            text = "View All",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
-
-            // Recent Reports List
-            items(recentHistory, key = { it.id }) { item ->
-                HistoryItemCard(
-                    item = item,
-                    onClick = { onNavigateToReport(item.id) }
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -413,71 +386,132 @@ fun HomeScreen(
 }
 
 @Composable
-private fun StatColumnItem(
-    value: String,
-    label: String,
-    color: Color
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = color
+fun StatsSummaryRow(stats: HomeStats) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        StatPill(
+            label = "Total Verified",
+            value = stats.totalVerified.toString(),
+            modifier = Modifier.weight(1f)
         )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        StatPill(
+            label = "Risks Blocked",
+            value = stats.misleadingBlocked.toString(),
+            color = Color(0xFFEF4444),
+            modifier = Modifier.weight(1f)
+        )
+        StatPill(
+            label = "Avg Score",
+            value = if (stats.totalVerified > 0) "${stats.averageScore}%" else "-",
+            color = CyanPrimary,
+            modifier = Modifier.weight(1f)
         )
     }
 }
 
 @Composable
-private fun QuickActionCard(
-    icon: ImageVector,
+fun StatPill(
     label: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
+    value: String,
+    color: Color = Color.White,
+    modifier: Modifier = Modifier
 ) {
-    val extendedColors = LocalExtendedColors.current
-
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = modifier
-            .border(1.dp, extendedColors.cardBorder, RoundedCornerShape(16.dp))
-            .clickable { onClick() }
-            .testTag("quick_action_${label.lowercase().replace(" ", "_")}")
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(vertical = 16.dp, horizontal = 8.dp).fillMaxWidth()
+            modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Box(
-                modifier = Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = label,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = color
+            )
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+fun RecentHistoryItem(
+    history: HistoryEntity,
+    onClick: () -> Unit
+) {
+    val verdict = Verdict.fromString(history.verdict)
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().testTag("history_item_${history.id}"),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = history.title.ifBlank { history.originalClaim },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Source: ${history.inputType}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "• ${history.sourcesCount} sources",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            VerdictBadge(verdict = verdict)
+        }
+    }
+}
+
+@Composable
+fun EmptyHistoryBanner() {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "No verifications yet",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Tap 'Camera Scan' or 'Screenshot' above to start verifying information.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

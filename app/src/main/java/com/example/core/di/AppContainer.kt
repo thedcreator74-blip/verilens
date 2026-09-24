@@ -3,64 +3,75 @@ package com.example.core.di
 import android.content.Context
 import com.example.data.local.database.AppDatabase
 import com.example.data.local.datastore.UserPreferencesRepository
-import com.example.data.network.VerificationApiService
 import com.example.data.repository.SettingsRepository
-import com.example.data.repository.SettingsRepositoryImpl
 import com.example.data.repository.VerificationRepository
-import com.example.data.repository.VerificationRepositoryImpl
 import com.example.feature.chat.repository.ChatRepository
-import com.example.feature.chat.repository.ChatRepositoryImpl
+import com.example.feature.verification.analysis.ScreenshotAnalyzer
+import com.example.feature.verification.article.ArticleContentExtractor
+import com.example.feature.verification.article.ArticleContentExtractorImpl
+import com.example.feature.verification.capture.ScreenCaptureManager
+import com.example.feature.verification.engine.GeminiEvidenceReasoner
 import com.example.feature.verification.pipeline.VerificationPipeline
+import com.example.feature.verification.search.CompositeEvidenceSearcher
+import com.example.feature.verification.search.EvidenceSearcher
+import com.example.feature.verification.trust.DomainTrustResolver
+import com.example.feature.verification.trust.DomainTrustResolverImpl
 import com.example.overlay.OverlayManager
 import com.example.permissions.PermissionManager
-import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.Retrofit
-import retrofit2.converter.moshi.MoshiConverterFactory
-import java.util.concurrent.TimeUnit
 
 interface AppContainer {
+    val context: Context
     val database: AppDatabase
     val userPreferencesRepository: UserPreferencesRepository
-    val verificationRepository: VerificationRepository
     val settingsRepository: SettingsRepository
+    val verificationRepository: VerificationRepository
+    val verificationPipeline: VerificationPipeline
+    val domainTrustResolver: DomainTrustResolver
+    val articleExtractor: ArticleContentExtractor
+    val evidenceSearcher: EvidenceSearcher
+    val evidenceReasoner: GeminiEvidenceReasoner
+    val screenshotAnalyzer: ScreenshotAnalyzer
+    val screenCaptureManager: ScreenCaptureManager
     val permissionManager: PermissionManager
     val overlayManager: OverlayManager
-    val verificationApiService: VerificationApiService
     val chatRepository: ChatRepository
 }
 
-class DefaultAppContainer(private val context: Context) : AppContainer {
-
+class DefaultAppContainer(override val context: Context) : AppContainer {
     override val database: AppDatabase by lazy {
-        AppDatabase.getInstance(context)
+        AppDatabase.getDatabase(context)
     }
 
     override val userPreferencesRepository: UserPreferencesRepository by lazy {
         UserPreferencesRepository(context)
     }
 
-    val verificationPipeline: VerificationPipeline by lazy {
-        VerificationPipeline(
-            context = context,
-            historyDao = database.historyDao(),
-            recentInputDao = database.recentInputDao()
-        )
-    }
-
-    override val verificationRepository: VerificationRepository by lazy {
-        VerificationRepositoryImpl(
-            historyDao = database.historyDao(),
-            recentInputDao = database.recentInputDao(),
-            verificationPipeline = verificationPipeline
-        )
-    }
-
     override val settingsRepository: SettingsRepository by lazy {
-        SettingsRepositoryImpl(
-            preferencesRepository = userPreferencesRepository,
-            settingsDao = database.settingsDao()
-        )
+        SettingsRepository(userPreferencesRepository)
+    }
+
+    override val domainTrustResolver: DomainTrustResolver by lazy {
+        DomainTrustResolverImpl()
+    }
+
+    override val articleExtractor: ArticleContentExtractor by lazy {
+        ArticleContentExtractorImpl()
+    }
+
+    override val evidenceSearcher: EvidenceSearcher by lazy {
+        CompositeEvidenceSearcher(domainTrustResolver = domainTrustResolver)
+    }
+
+    override val evidenceReasoner: GeminiEvidenceReasoner by lazy {
+        GeminiEvidenceReasoner()
+    }
+
+    override val screenshotAnalyzer: ScreenshotAnalyzer by lazy {
+        ScreenshotAnalyzer(context)
+    }
+
+    override val screenCaptureManager: ScreenCaptureManager by lazy {
+        ScreenCaptureManager(context)
     }
 
     override val permissionManager: PermissionManager by lazy {
@@ -71,28 +82,28 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
         OverlayManager(context)
     }
 
-    // Prepared Retrofit client (offline / mock base URL for architecture readiness)
-    override val verificationApiService: VerificationApiService by lazy {
-        val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BASIC
-        }
-        val okHttpClient = OkHttpClient.Builder()
-            .addInterceptor(logging)
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .build()
-
-        Retrofit.Builder()
-            .baseUrl("https://api.verilens.ai/") // Placeholder endpoint
-            .client(okHttpClient)
-            .addConverterFactory(MoshiConverterFactory.create())
-            .build()
-            .create(VerificationApiService::class.java)
+    override val chatRepository: ChatRepository by lazy {
+        ChatRepository()
     }
 
-    override val chatRepository: ChatRepository by lazy {
-        ChatRepositoryImpl(
-            verificationRepository = verificationRepository
+    override val verificationPipeline: VerificationPipeline by lazy {
+        VerificationPipeline(
+            context = context,
+            historyDao = database.historyDao(),
+            recentInputDao = database.recentInputDao(),
+            screenshotAnalyzer = screenshotAnalyzer,
+            evidenceSearcher = evidenceSearcher,
+            evidenceReasoner = evidenceReasoner,
+            articleExtractor = articleExtractor,
+            domainTrustResolver = domainTrustResolver
+        )
+    }
+
+    override val verificationRepository: VerificationRepository by lazy {
+        VerificationRepository(
+            historyDao = database.historyDao(),
+            recentInputDao = database.recentInputDao(),
+            verificationPipeline = verificationPipeline
         )
     }
 }

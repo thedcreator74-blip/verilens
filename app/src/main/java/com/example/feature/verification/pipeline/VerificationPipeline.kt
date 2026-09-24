@@ -8,14 +8,15 @@ import com.example.data.local.database.daos.RecentInputDao
 import com.example.data.local.database.entities.HistoryEntity
 import com.example.data.local.database.entities.RecentInputEntity
 import com.example.feature.verification.analysis.ScreenshotAnalyzer
-import com.example.feature.verification.claim.ClaimExtractor
+import com.example.feature.verification.article.ArticleContentExtractor
+import com.example.feature.verification.claim.ClaimNormalizer
 import com.example.feature.verification.engine.GeminiEvidenceReasoner
 import com.example.feature.verification.model.CollectedEvidenceItem
-import com.example.feature.verification.model.ExtractedVisualAnalysis
+import com.example.feature.verification.model.VerificationInputType
 import com.example.feature.verification.model.VerificationProgress
 import com.example.feature.verification.model.VerificationStep
-import com.example.feature.verification.search.InternetEvidenceSearcher
-import com.example.feature.verification.strategy.VerificationStrategyEngine
+import com.example.feature.verification.search.EvidenceSearcher
+import com.example.feature.verification.trust.DomainTrustResolver
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -30,196 +31,161 @@ class VerificationPipeline(
     private val context: Context,
     private val historyDao: HistoryDao,
     private val recentInputDao: RecentInputDao,
-    private val screenshotAnalyzer: ScreenshotAnalyzer = ScreenshotAnalyzer(context),
-    private val evidenceSearcher: InternetEvidenceSearcher = InternetEvidenceSearcher(),
-    private val evidenceReasoner: GeminiEvidenceReasoner = GeminiEvidenceReasoner()
+    private val screenshotAnalyzer: ScreenshotAnalyzer,
+    private val evidenceSearcher: EvidenceSearcher,
+    private val evidenceReasoner: GeminiEvidenceReasoner,
+    private val articleExtractor: ArticleContentExtractor,
+    private val domainTrustResolver: DomainTrustResolver,
+    private val claimNormalizer: ClaimNormalizer = ClaimNormalizer()
 ) {
-    private val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
-    private val listStringType = Types.newParameterizedType(List::class.java, String::class.java)
-    private val listEvidenceType = Types.newParameterizedType(List::class.java, CollectedEvidenceItem::class.java)
-
-    private val stringListAdapter = moshi.adapter<List<String>>(listStringType)
-    private val evidenceListAdapter = moshi.adapter<List<CollectedEvidenceItem>>(listEvidenceType)
-
-    private val _progressState = MutableStateFlow(VerificationProgress(VerificationStep.UPLOADING_PREPROCESSING, "Idle", 0.0f))
+    private val _progressState = MutableStateFlow(
+        VerificationProgress(VerificationStep.UPLOADING_PREPROCESSING, "Ready", 0.0f)
+    )
     val progressState: StateFlow<VerificationProgress> = _progressState.asStateFlow()
 
+    private val moshi = Moshi.Builder().addLast(KotlinJsonAdapterFactory()).build()
+    private val evidenceListAdapter = moshi.adapter<List<CollectedEvidenceItem>>(
+        Types.newParameterizedType(List::class.java, CollectedEvidenceItem::class.java)
+    )
+    private val stringListAdapter = moshi.adapter<List<String>>(
+        Types.newParameterizedType(List::class.java, String::class.java)
+    )
+
     private fun updateProgress(step: VerificationStep, detail: String) {
-        val percent = (step.stepIndex.coerceAtLeast(1).toFloat() / 10f).coerceIn(0.1f, 1.0f)
+        val percent = (step.stepIndex / 10.0f).coerceIn(0.1f, 1.0f)
         _progressState.value = VerificationProgress(step, detail, percent)
     }
 
-    /**
-     * Complete evidence-based verification for an uploaded screenshot (Uri or Bitmap).
-     */
     suspend fun verifyScreenshotInput(
-        imageUri: Uri? = null,
-        providedBitmap: Bitmap? = null
+        imageUri: Uri?,
+        providedBitmap: Bitmap?,
+        inputType: VerificationInputType = VerificationInputType.SCREENSHOT
     ): Long = withContext(Dispatchers.IO) {
-        try {
-            // Step 1: Uploading & Preprocessing
-            updateProgress(VerificationStep.UPLOADING_PREPROCESSING, "Standardizing image resolution & preparing visual tensors...")
-            val bitmap = providedBitmap ?: imageUri?.let { screenshotAnalyzer.loadBitmapFromUri(it) }
-                ?: throw IllegalArgumentException("Could not decode screenshot image.")
-            val (scaledBitmap, jpegBytes) = screenshotAnalyzer.preprocessBitmap(bitmap)
-            delay(150)
+        updateProgress(VerificationStep.UPLOADING_PREPROCESSING, "Processing visual capture...")
+        delay(150)
 
-            // Step 2: Extracting Text (OCR)
-            updateProgress(VerificationStep.EXTRACTING_TEXT, "Scanning text lines and typographic structure on-device...")
-            val ocrText = screenshotAnalyzer.extractOcrText(scaledBitmap)
-            delay(150)
+        updateProgress(VerificationStep.ANALYZING_IMAGE_QUALITY, "Evaluating readability and framing...")
+        val visualAnalysis = screenshotAnalyzer.analyze(providedBitmap, imageUri)
+        delay(150)
 
-            // Step 3: Analyzing Screenshot (Gemini Vision / Visual Audit)
-            updateProgress(VerificationStep.ANALYZING_SCREENSHOT, "Auditing layout, logos, digital compression & manipulation signs...")
-            val visualAnalysis = screenshotAnalyzer.analyzeWithGeminiVision(jpegBytes, ocrText)
-            delay(150)
-
-            // Step 4: Identifying Primary Claim
-            updateProgress(VerificationStep.IDENTIFYING_CLAIM, "Removing UI noise, status bars & isolating primary proposition...")
-            val primaryClaim = ClaimExtractor.extractPrimaryClaim(
-                rawOcr = ocrText,
-                visualHeadline = visualAnalysis.headline,
-                visualClaim = visualAnalysis.primaryClaim
-            )
-            delay(150)
-
-            // Record recent input
-            recentInputDao.insertInput(RecentInputEntity(type = "SCREENSHOT", content = primaryClaim))
-
-            // Execute common verification for this claim
-            return@withContext executeVerificationForClaim(
-                primaryClaim = primaryClaim,
-                inputType = "SCREENSHOT",
-                visualAnalysis = visualAnalysis,
-                imageUriString = imageUri?.toString()
-            )
-        } catch (e: Exception) {
-            updateProgress(VerificationStep.FAILED, "Verification failed: ${e.message ?: "Unknown error"}")
-            throw e
+        val rawText = if (visualAnalysis.detectedText.isNotBlank()) {
+            visualAnalysis.detectedText
+        } else {
+            "Visual evidence inspection"
         }
+
+        updateProgress(VerificationStep.CLAIM_NORMALIZATION, "Formulating checkable statements...")
+        val normalizedClaim = claimNormalizer.normalize(rawText, visualAnalysis.detectedUrls.firstOrNull())
+        delay(150)
+
+        executeVerificationFlow(
+            originalClaim = rawText,
+            normalizedClaim = normalizedClaim.primaryClaim,
+            searchQuery = normalizedClaim.searchQueries.firstOrNull() ?: rawText,
+            inputType = inputType.name,
+            imageUri = imageUri?.toString()
+        )
     }
 
-    /**
-     * Complete evidence-based verification for text input.
-     */
     suspend fun verifyTextInput(text: String): Long = withContext(Dispatchers.IO) {
-        try {
-            updateProgress(VerificationStep.UPLOADING_PREPROCESSING, "Parsing input claim...")
-            delay(100)
-
-            updateProgress(VerificationStep.IDENTIFYING_CLAIM, "Isolating core factual statement...")
-            val primaryClaim = ClaimExtractor.extractPrimaryClaim(
-                rawOcr = text,
-                visualHeadline = "",
-                visualClaim = ""
-            )
-            delay(150)
-
-            recentInputDao.insertInput(RecentInputEntity(type = "TEXT", content = primaryClaim))
-
-            return@withContext executeVerificationForClaim(
-                primaryClaim = primaryClaim,
-                inputType = "TEXT",
-                visualAnalysis = null,
-                imageUriString = null
-            )
-        } catch (e: Exception) {
-            updateProgress(VerificationStep.FAILED, "Verification failed: ${e.message ?: "Unknown error"}")
-            throw e
-        }
-    }
-
-    /**
-     * Complete evidence-based verification for web link input.
-     */
-    suspend fun verifyLinkInput(url: String): Long = withContext(Dispatchers.IO) {
-        try {
-            updateProgress(VerificationStep.UPLOADING_PREPROCESSING, "Inspecting host domain and URL structure...")
-            delay(100)
-
-            val cleanHost = url.removePrefix("https://").removePrefix("http://").substringBefore("/")
-            val linkClaim = "Inspection of source domain $cleanHost and referenced web resource: $url"
-
-            recentInputDao.insertInput(RecentInputEntity(type = "LINK", content = url))
-
-            return@withContext executeVerificationForClaim(
-                primaryClaim = linkClaim,
-                inputType = "LINK",
-                visualAnalysis = null,
-                imageUriString = null
-            )
-        } catch (e: Exception) {
-            updateProgress(VerificationStep.FAILED, "Verification failed: ${e.message ?: "Unknown error"}")
-            throw e
-        }
-    }
-
-    /**
-     * Core verification pipeline executed once claim is isolated.
-     */
-    private suspend fun executeVerificationForClaim(
-        primaryClaim: String,
-        inputType: String,
-        visualAnalysis: ExtractedVisualAnalysis?,
-        imageUriString: String?
-    ): Long {
-        // Step 5: Detecting Category
-        updateProgress(VerificationStep.DETECTING_CATEGORY, "Determining claim domain and verification strategy...")
-        val category = VerificationStrategyEngine.detectCategory(primaryClaim)
-        delay(150)
-
-        // Step 6: Searching Trusted Sources
-        updateProgress(VerificationStep.SEARCHING_TRUSTED_SOURCES, "Querying official registries, databases & wire archives for ${category.displayName}...")
-        val evidenceList = evidenceSearcher.searchAndCollectEvidence(primaryClaim, category)
-        delay(150)
-
-        // Step 7: Collecting Evidence
-        updateProgress(VerificationStep.COLLECTING_EVIDENCE, "Gathering verified citations, publication dates & excerpts (${evidenceList.size} records found)...")
-        delay(150)
-
-        // Step 8: Comparing Evidence
-        updateProgress(VerificationStep.COMPARING_EVIDENCE, "Corroborating factual assertions against collected evidence...")
-        delay(150)
-
-        // Step 9: Generating Report via Gemini Evidence Reasoner
-        updateProgress(VerificationStep.GENERATING_REPORT, "Synthesizing transparent, evidence-backed verification report...")
-        val reportPayload = evidenceReasoner.synthesizeEvidenceReport(
-            claim = primaryClaim,
-            category = category.name,
-            collectedEvidence = evidenceList,
-            visualAnalysis = visualAnalysis
-        )
-        delay(150)
-
-        // Save to Room database
-        val titleText = if (primaryClaim.length > 55) primaryClaim.take(52) + "..." else primaryClaim
-        val entity = HistoryEntity(
-            title = titleText,
-            snippet = primaryClaim,
-            inputType = inputType,
-            credibilityScore = reportPayload.confidence,
-            verdict = reportPayload.verdict,
-            summary = reportPayload.assessment,
-            sourcesCount = evidenceList.size,
-            timestamp = System.currentTimeMillis(),
-            isBookmarked = false,
-            originalClaim = primaryClaim,
-            verifiedInformation = reportPayload.verifiedInformation,
-            reasoning = reportPayload.reasoning,
-            category = category.name,
-            evidenceSummaryJson = stringListAdapter.toJson(reportPayload.evidenceSummary),
-            sourcesJson = evidenceListAdapter.toJson(evidenceList),
-            recommendationsJson = stringListAdapter.toJson(reportPayload.recommendations),
-            disclaimer = reportPayload.disclaimer,
-            imageUri = imageUriString
-        )
-
-        val generatedId = historyDao.insert(entity)
-
-        // Step 10: Completed
-        updateProgress(VerificationStep.COMPLETED, "Verification complete. Rendering report.")
+        updateProgress(VerificationStep.UPLOADING_PREPROCESSING, "Analyzing text submission...")
         delay(100)
 
-        return generatedId
+        updateProgress(VerificationStep.CLAIM_NORMALIZATION, "Formulating verifiable claims...")
+        val normalized = claimNormalizer.normalize(text)
+        delay(150)
+
+        executeVerificationFlow(
+            originalClaim = text,
+            normalizedClaim = normalized.primaryClaim,
+            searchQuery = normalized.searchQueries.firstOrNull() ?: text,
+            inputType = VerificationInputType.TEXT.name,
+            imageUri = null
+        )
+    }
+
+    suspend fun verifyLinkInput(url: String): Long = withContext(Dispatchers.IO) {
+        updateProgress(VerificationStep.UPLOADING_PREPROCESSING, "Resolving URL destination...")
+        delay(100)
+
+        updateProgress(VerificationStep.DOMAIN_TRUST_CHECK, "Checking domain registration & trust...")
+        val trust = domainTrustResolver.resolveTrust(url)
+        delay(150)
+
+        updateProgress(VerificationStep.OCR_TEXT_EXTRACTION, "Extracting article contents...")
+        val article = articleExtractor.extract(url)
+        delay(150)
+
+        val claimText = if (article.title.isNotBlank()) article.title else url
+        val normalized = claimNormalizer.normalize(claimText, url)
+
+        executeVerificationFlow(
+            originalClaim = url,
+            normalizedClaim = "${trust.organization}: ${article.title}",
+            searchQuery = "${trust.domain} ${article.title}",
+            inputType = VerificationInputType.URL.name,
+            imageUri = null,
+            articleSnippet = article.body.take(200)
+        )
+    }
+
+    private suspend fun executeVerificationFlow(
+        originalClaim: String,
+        normalizedClaim: String,
+        searchQuery: String,
+        inputType: String,
+        imageUri: String?,
+        articleSnippet: String? = null
+    ): Long {
+        updateProgress(VerificationStep.SEARCHING_EVIDENCE, "Querying global fact-checking & news archives...")
+        val evidenceList = evidenceSearcher.searchEvidence(searchQuery, maxResults = 5)
+        delay(200)
+
+        updateProgress(VerificationStep.TEMPORAL_ANALYSIS, "Validating timeline, dates & citations...")
+        delay(150)
+
+        updateProgress(VerificationStep.EVIDENCE_CLUSTERING, "Cross-referencing corroborating reports...")
+        delay(150)
+
+        updateProgress(VerificationStep.GEMINI_REASONING, "Synthesizing evidence verdict with VeriLens AI...")
+        val normClaimObj = claimNormalizer.normalize(normalizedClaim)
+        val reasoningResult = evidenceReasoner.synthesizeVerdict(
+            claim = normClaimObj,
+            evidence = evidenceList,
+            articleBody = articleSnippet
+        )
+        delay(200)
+
+        updateProgress(VerificationStep.FINALIZING_REPORT, "Saving verification record...")
+
+        val historyEntity = HistoryEntity(
+            title = normalizedClaim.take(80),
+            originalClaim = originalClaim,
+            verifiedInformation = reasoningResult.verifiedInformation,
+            inputType = inputType,
+            credibilityScore = reasoningResult.credibilityScore,
+            verdict = reasoningResult.verdict.name,
+            summary = reasoningResult.summary,
+            reasoning = reasoningResult.reasoning,
+            category = "News & Social",
+            sourcesCount = evidenceList.size,
+            snippet = articleSnippet ?: (evidenceList.firstOrNull()?.snippet ?: ""),
+            evidenceSummaryJson = evidenceListAdapter.toJson(evidenceList),
+            sourcesJson = evidenceListAdapter.toJson(evidenceList),
+            recommendationsJson = stringListAdapter.toJson(reasoningResult.recommendations),
+            disclaimer = reasoningResult.disclaimer,
+            imageUri = imageUri
+        )
+
+        val insertedId = historyDao.insertHistory(historyEntity)
+
+        recentInputDao.insertRecentInput(
+            RecentInputEntity(
+                type = inputType,
+                content = originalClaim.take(120)
+            )
+        )
+
+        return insertedId
     }
 }

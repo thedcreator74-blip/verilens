@@ -1,68 +1,84 @@
 package com.example.overlay
 
-import android.app.ActivityManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.os.IBinder
 import android.provider.Settings
-import android.util.Log
+import androidx.core.app.NotificationCompat
+import com.example.MainActivity
+import com.example.R
+import com.example.VeriLensApplication
 
 class OverlayManager(private val context: Context) {
 
-    companion object {
-        private const val TAG = "OverlayManager"
-    }
-
     fun isOverlayPermitted(): Boolean {
-        val permitted = Settings.canDrawOverlays(context)
-        Log.d(TAG, "isOverlayPermitted: $permitted")
-        return permitted
+        return Settings.canDrawOverlays(context)
     }
 
-    fun isServiceRunning(): Boolean {
-        if (VeriLensOverlayService.isOverlayActive) return true
-        val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        @Suppress("DEPRECATION")
-        for (service in manager.getRunningServices(Int.MAX_VALUE)) {
-            if (VeriLensOverlayService::class.java.name == service.service.className) {
-                return true
-            }
-        }
-        return false
-    }
-
-    fun startOverlay(): Boolean {
-        if (!isOverlayPermitted()) {
-            Log.w(TAG, "Cannot start overlay service: Permission granted: false")
-            return false
-        }
-        Log.d(TAG, "Permission granted: true. Starting service...")
-        val intent = Intent(context, VeriLensOverlayService::class.java).apply {
-            action = VeriLensOverlayService.ACTION_START
-        }
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
-            Log.d(TAG, "Overlay service started successfully")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to start overlay service: ${e.message}", e)
-            false
+    fun startOverlay() {
+        if (!isOverlayPermitted()) return
+        val intent = Intent(context, VeriLensOverlayService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
         }
     }
 
     fun stopOverlay() {
-        Log.d(TAG, "Stopping overlay service")
-        try {
-            val intent = Intent(context, VeriLensOverlayService::class.java).apply {
-                action = VeriLensOverlayService.ACTION_STOP
-            }
-            context.stopService(intent)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error stopping overlay service", e)
+        val intent = Intent(context, VeriLensOverlayService::class.java)
+        context.stopService(intent)
+    }
+}
+
+class VeriLensOverlayService : Service() {
+
+    companion object {
+        const val EXTRA_OPEN_SHEET = "extra_open_sheet"
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        startAsForeground()
+    }
+
+    private fun startAsForeground() {
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            putExtra(EXTRA_OPEN_SHEET, true)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            openIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification: Notification = NotificationCompat.Builder(
+            this,
+            VeriLensApplication.OVERLAY_NOTIFICATION_CHANNEL_ID
+        )
+            .setContentTitle("VeriLens Assistant Active")
+            .setContentText("Tap to quick-verify suspicious messages or screen content.")
+            .setSmallIcon(android.R.drawable.ic_menu_camera)
+            .setContentIntent(pendingIntent)
+            .setOngoing(true)
+            .build()
+
+        startForeground(VeriLensApplication.OVERLAY_NOTIFICATION_ID, notification)
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
     }
 }
